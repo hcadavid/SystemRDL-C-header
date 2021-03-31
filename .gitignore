@@ -1,0 +1,7 @@
+# Generated output
+out/
+
+# Python
+venv/
+__pycache__/
+*.pyc
