@@ -1,4 +1,6 @@
 import os
+import textwrap
+
 from systemrdl.node import AddressableNode, RootNode
 from systemrdl.node import AddrmapNode, MemNode
 from systemrdl.node import RegNode, RegfileNode, FieldNode
@@ -17,6 +19,9 @@ class headerGenExporter:
 
         self.definePrefix = "#"
         self.hexPrefix = "0x"
+
+        self.line_len = 75
+        self.doc_line_prefix = " * "
 
         self.baseAddressName = ""
         self.filename = ""
@@ -90,20 +95,20 @@ class headerGenExporter:
             self.add_addressBlock(node)
 
         self.headerFileContent.append(
-            "\n {:s} /* {:s} */".format(self.endIf, self.includeGuard)
+            "\n{:s} /* {:s} */\n".format(self.endIf, self.includeGuard)
         )
         # Write out UVM RegModel file
         with open(os.path.join(self.dirname, self.filename), "w") as f:
             f.write("\n".join(self.headerFileContent))
 
     # ---------------------------------------------------------------------------
-    def add_content(self, content):
+    def add_def(self, content):
         self.headerFileContent.append(self.define + content)
 
     # ---------------------------------------------------------------------------
     def add_addressBlock(self, node):
-
-        self.add_content("%s 0" % ("%s_BASE_ADDR" % node.inst_name.upper()))
+        self.add_docblock(node)
+        self.add_def("%s 0" % ("%s_BASE_ADDR" % node.inst_name.upper()))
         self.baseAddressName = "%s_BASE_ADDR" % node.inst_name.upper()
 
         for child in node.children():
@@ -117,23 +122,19 @@ class headerGenExporter:
             if isinstance(child, RegNode):
                 self.add_register(node, child)
             elif isinstance(child, (AddrmapNode, RegfileNode)):
+                self.add_docblock(child)
                 self.add_registerFile(child)
 
     # ---------------------------------------------------------------------------
     def add_register(self, parent, node):
         macro_var_name = "BASE"
-        self.headerFileContent.append("/* register: %s */" % node.inst_name)
+        self.add_docblock(node)
         if parent.is_array:
-            regMacro = (
-                parent.inst_name.upper()
-                + "_"
-                + node.inst_name.upper()
-                + "({:s})".format(macro_var_name)
-            )
-            self.add_content(
-                regMacro
-                + " %s + %s%x + %s*%s%x + %s%x"
-                % (
+            self.add_def(
+                "{:s}_{:s}({:s}) ({:s} + {:s}{:x} + {:s}*{:s}{:x} + {:s}{:x})".format(
+                    parent.inst_name.upper(),
+                    node.inst_name.upper(),
+                    macro_var_name,
                     self.baseAddressName,
                     self.hexPrefix,
                     parent.raw_address_offset,
@@ -145,16 +146,11 @@ class headerGenExporter:
                 )
             )
         elif node.is_array:
-            regMacro = (
-                parent.inst_name.upper()
-                + "_"
-                + node.inst_name.upper()
-                + "({:s})".format(macro_var_name)
-            )
-            self.add_content(
-                regMacro
-                + " %s + %s%x + %s*%s%x"
-                % (
+            self.add_def(
+                "{:s}_{:s}({:s}) ({:s} + {:s}{:x} + {:s}*{:s}{:x})".format(
+                    parent.inst_name.upper(),
+                    node.inst_name.upper(),
+                    macro_var_name,
                     self.baseAddressName,
                     self.hexPrefix,
                     node.raw_address_offset,
@@ -164,28 +160,54 @@ class headerGenExporter:
                 )
             )
         else:
-            regMacro = parent.inst_name.upper() + "_" + node.inst_name.upper()
-            self.add_content(
-                regMacro
-                + " %s + %s%x"
-                % (self.baseAddressName, self.hexPrefix, node.absolute_address)
+            self.add_def(
+                "{:s}_{:s} ({:s} + {:s}{:x})".format(
+                    parent.inst_name.upper(),
+                    node.inst_name.upper(),
+                    self.baseAddressName,
+                    self.hexPrefix,
+                    node.absolute_address,
+                )
             )
 
         for field in node.fields():
             self.add_field(node, field)
 
+    def add_docblock(self, node):
+        brief = node.get_property("name")
+        brief = brief.replace("\n", " ").replace("\r", "")
+
+        desc = node.get_property("desc")
+        if desc is None:
+            desc = "[No description]"
+
+        desc = desc.replace("\n", " ").replace("\r", "")
+        desc = "@brief " + brief + "\n *\n * " + desc
+        desc = textwrap.fill(
+            desc,
+            width=self.line_len,
+            subsequent_indent=self.doc_line_prefix,
+            replace_whitespace=False,
+        )
+        self.headerFileContent.append("\n/** {}\n */".format(desc))
+
+    def add_inline_desc(self, node):
+        if node.get_html_desc() is not None:
+            self.headerFileContent[-1] += " /**< {:s} */".format(
+                node.get_property("desc")
+            )
+
     # ---------------------------------------------------------------------------
     def add_field(self, parent, node):
-        regFieldOffsetMacro = (
-            parent.inst_name.upper() + "_REG_" + node.inst_name.upper() + "_" + "OFFSET"
-        )
-        self.add_content(regFieldOffsetMacro + " %d" % node.low)
 
-        regFieldMaskMacro = (
-            parent.inst_name.upper() + "_REG_" + node.inst_name.upper() + "_" + "MASK"
+        field_name = "{:s}_REG_{:s}".format(
+            parent.inst_name.upper(), node.inst_name.upper()
         )
-        maskValue = hex(int("1" * node.width, 2) << node.low).replace("0x", "")
-        self.add_content(regFieldMaskMacro + " %s%s" % (self.hexPrefix, maskValue))
+        self.add_def("{:s}_OFFSET {:d}U".format(field_name, node.low))
+
+        maskValue = int("1" * node.width, 2) << node.low
+        self.add_def("{:s}_MASK 0x{:X}U".format(field_name, maskValue))
+        self.add_inline_desc(node)
 
         # encode = node.get_property("encode")
         # if encode is not None:
