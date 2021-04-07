@@ -2,6 +2,7 @@
 out/
 
 # Python
-venv/
+.venv/
+.poetry/
 __pycache__/
 *.pyc
