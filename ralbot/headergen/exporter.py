@@ -174,22 +174,26 @@ class headerGenExporter:
             self.add_field(node, field)
 
     def add_docblock(self, node):
-        brief = node.get_property("name")
-        brief = brief.replace("\n", " ").replace("\r", "")
+        txt = node.get_property("name").replace("\n", " ").replace("\r", "")
 
         desc = node.get_property("desc")
         if desc is None:
             desc = "[No description]"
-
         desc = desc.replace("\n", " ").replace("\r", "")
-        desc = "@brief " + brief + "\n *\n * " + desc
-        desc = textwrap.fill(
-            desc,
-            width=self.line_len,
-            subsequent_indent=self.doc_line_prefix,
-            replace_whitespace=False,
-        )
-        self.headerFileContent.append("\n/** {}\n */".format(desc))
+        desc += "\n\n" + node.get_path()
+
+        txt += "\n\n" + desc
+        lines = txt.splitlines()
+
+        reflowed = ""
+        for l in lines:
+            reflowed += (
+
+                textwrap.fill(l, subsequent_indent=self.doc_line_prefix)
+                + "\n" +  self.doc_line_prefix
+            )
+
+        self.headerFileContent.append("\n/** {}\n */".format(reflowed))
 
     def add_inline_desc(self, node):
         if node.get_html_desc() is not None:

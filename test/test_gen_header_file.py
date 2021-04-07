@@ -8,8 +8,7 @@ this_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(this_dir, "../"))
 
 
-from systemrdl import RDLCompiler, RDLListener, RDLWalker, RDLCompileError
-from systemrdl.node import FieldNode, RegNode, AddrmapNode, SignalNode
+from systemrdl import RDLCompiler, RDLCompileError
 from ralbot.headergen import headerGenExporter
 
 # Collect input files from the command line arguments
