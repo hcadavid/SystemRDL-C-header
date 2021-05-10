@@ -1,10 +1,12 @@
 import os
+import enum
 import textwrap
 from datetime import datetime
 
 from systemrdl.node import AddressableNode, RootNode
 from systemrdl.node import AddrmapNode, MemNode
 from systemrdl.node import RegNode, RegfileNode, FieldNode
+from systemrdl import rdltypes
 
 # ===============================================================================
 class headerGenExporter:
@@ -30,6 +32,8 @@ class headerGenExporter:
         self.ifnDef = self.definePrefix + "ifndef "
         self.ifDef = self.definePrefix + "ifdef "
         self.endIf = self.definePrefix + "endif"
+        self.generated_enums = []
+        self.generated_structs = []
 
     # ---------------------------------------------------------------------------
     def export(self, node, path):
@@ -56,6 +60,13 @@ class headerGenExporter:
         self.headerFileContent.append("{:s}{:s}".format(self.ifnDef, self.includeGuard))
         self.headerFileContent.append(
             "{:s}{:s}\n".format(self.define, self.includeGuard)
+        )
+
+        self.headerFileContent.append(
+            "#ifdef  __cplusplus\n"
+            "extern \"C\"\n"
+            "{\n"
+            "#endif\n"
         )
 
         # If it is the root node, skip to top addrmap
@@ -102,6 +113,13 @@ class headerGenExporter:
             # Export top-level node as a single addressBlock
             self.add_addressBlock(node)
 
+        self.headerFileContent.append(
+            "\n#ifdef  __cplusplus\n"
+            "}\n"
+            "#endif\n"
+        )
+
+        # "endif" include block
         self.headerFileContent.append(
             "\n{:s} /* {:s} */\n".format(self.endIf, self.includeGuard)
         )
@@ -174,7 +192,10 @@ class headerGenExporter:
 
         reg_rst_val = 0
         for field in node.fields():
-            self.add_field(parent.inst_name.upper() + "_" + node.inst_name.upper(), field)
+            self.check_write_field_typedef(field)
+            self.add_field(
+                parent.inst_name.upper() + "_" + node.inst_name.upper(), field
+            )
             reg_rst_val |= field.get_property("reset", default=0) << field.low
 
         self.add_def(
@@ -220,16 +241,43 @@ class headerGenExporter:
             )
         return "\n/** {}\n */".format(reflowed)
 
+    def check_write_field_typedef(self, field):
+        fencode = field.get_property("encode")
+
+        if isinstance(fencode, enum.Enum):
+            print("is (builtin) enum.Enum")
+            return
+        elif rdltypes.is_user_enum(fencode):
+            self.add_enum(fencode)
+
+    def add_enum(self, user_enum):
+        enum_id = "{}::{}".format(user_enum.get_scope_path(), user_enum.__name__)
+
+        if enum_id in self.generated_enums:
+            return
+        self.generated_enums.append(enum_id)
+        print("Adding enum:", enum_id)
+
+        txt = user_enum.__name__.replace("\n", " ").replace("\r", "") + "\n\n"
+        txt += "[SystemRDL path: '" + enum_id + "']"
+        self.headerFileContent.append(self.create_docblock(txt))
+
+        self.headerFileContent.append("typedef enum " + user_enum.__name__.upper() + "_e {")
+        for e in user_enum:
+            self.headerFileContent.append("  {:s} = {:d}, /**< {} */".format(user_enum.__name__.upper() + "_" + e.name.upper(), int(e),  e.rdl_desc))
+            # self.add_inline_desc(e)
+
+        self.headerFileContent.append( "} " + user_enum.__name__.upper() + "_t;\n")
+
     # ---------------------------------------------------------------------------
     def add_field(self, parent_name: str, node):
 
-        field_name = "{:s}_{:s}".format(
-            parent_name, node.inst_name.upper()
-        )
-        self.add_def("{:s}_OFFSET {:d}U".format(field_name, node.low))
+        field_name = "{:s}_{:s}".format(parent_name, node.inst_name.upper())
+        self.add_def("{:s}_Pos {:d}U".format(field_name, node.low))
 
         maskValue = int("1" * node.width, 2) << node.low
-        self.add_def("{:s}_MASK {:#x}U".format(field_name, maskValue))
+        # self.add_def("{:s}_Msk {:#x}U".format(field_name, maskValue))
+        self.add_def("{0:s}_Msk (0x{1:X}U << {0:s}_Pos)".format(field_name, maskValue))
 
         # FIXME: Not sure that I like this, after running a few example files
         # through this exporter. Thinking that instead documentation for fields
