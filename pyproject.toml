@@ -1,6 +1,7 @@
 [tool.poetry]
 name = "SystemRDL-C-Header"
 version = "0.1.0"
+authors = []
 description = "Generate a C header from a SystemRDL register definition, using systemrdl-compiler"
 
 [tool.poetry.dependencies]
