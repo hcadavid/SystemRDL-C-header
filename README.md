@@ -29,3 +29,9 @@ Since I'm on Windows, using Bash from "Git for Windows", I run `source ./.venv/S
 ```bash
 python3 ./test/test_gen_header_file.py ./test/accelera-generic_example.rdl
 ```
+
+## TODO
+
+* [ ] Enums
+* [ ] Structs
+* [ ] `BASEADDR` defines ("instance" base addresses)
