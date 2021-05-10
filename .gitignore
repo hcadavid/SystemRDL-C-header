@@ -6,3 +6,6 @@ out/
 .poetry/
 __pycache__/
 *.pyc
+
+# Misc
+.vscode/

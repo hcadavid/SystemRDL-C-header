@@ -153,7 +153,7 @@ class headerGenExporter:
 
     # ---------------------------------------------------------------------------
     def add_register(self, parent, node):
-        macro_var_name = "baseaddr_"
+        macro_var_name = "n"
         self.add_docblock(node=node)
         if parent.is_array:
             self.add_def(
@@ -223,6 +223,7 @@ class headerGenExporter:
     def add_inline_desc(self, node):
         if node.get_html_desc() is not None:
             desc = node.get_property("desc").strip()
+            desc = desc.replace("\n", " ").replace("\r", "")
             self.headerFileContent[-1] += " /**< {:s}, ACCESS: {:s} */".format(
                 desc,
                 node.get_property("sw").name,
