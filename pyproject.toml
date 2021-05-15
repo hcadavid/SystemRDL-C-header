@@ -6,10 +6,10 @@ description = "Generate a C header from a SystemRDL register definition, using s
 
 [tool.poetry.dependencies]
 python = "^3.6"
-systemrdl-compiler = "^1.0.0"
+systemrdl-compiler = "^1.17.0"
+
 
 [tool.poetry.dev-dependencies]
-pylint = "^2.7.4"
 black = "^20.8b1"
 
 [build-system]
