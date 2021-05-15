@@ -153,6 +153,11 @@ class headerGenExporter:
         self.add_reg_struct(reg_node=node)
 
         if parent.is_array:
+            self.add_def("{:s}_{:s}_INST_MAX {}".format(
+                parent.inst_name.upper(),
+                node.inst_name.upper(),
+                parent.array_dimensions[0]
+            ))
             self.add_def(
                 "{:s}_{:s}({:s}) ({:s} + {:#x} + ({:s}*{:#x}) + {:#x})".format(
                     parent.inst_name.upper(),
@@ -166,6 +171,11 @@ class headerGenExporter:
                 )
             )
         elif node.is_array:
+            self.add_def("{:s}_{:s}_INST_MAX {}".format(
+                parent.inst_name.upper(),
+                node.inst_name.upper(),
+                node.array_dimensions[0]
+            ))
             self.add_def(
                 "{:s}_{:s}({:s}) ({:s} + {:#x} + ({:s}*{:#x}))".format(
                     parent.inst_name.upper(),
@@ -198,8 +208,9 @@ class headerGenExporter:
             reg_rst_val |= field.get_property("reset", default=0) << field.low
 
         self.add_def(
-            "{:s}_{:s}_RESET {:#x}".format(
-                parent.inst_name.upper(), node.inst_name.upper(), reg_rst_val
+            "{:s}_{:s}_RESET {:#x} /**< Reset value of '{}' */".format(
+                parent.inst_name.upper(), node.inst_name.upper(), reg_rst_val,
+                node.inst_name
             )
         )
 
@@ -309,7 +320,7 @@ class headerGenExporter:
             elif field.width <= 64:
                 c_type = 'uint64_t'
 
-            out_field += c_type + " "+ field.inst_name.lower()
+            out_field += c_type + " "+ field.inst_name
 
             if (field.width % 4) is not 0:
                 out_field += ":{:d}".format(field.width)
@@ -318,7 +329,7 @@ class headerGenExporter:
             self.add_inline_desc(field)
             
 
-        self.headerFileContent.append("}} {}_t;\n".format(reg_node.inst_name.lower()))
+        self.headerFileContent.append("}} {}_t;\n".format(reg_node.inst_name))
 
     # ---------------------------------------------------------------------------
     def add_field_pos_mask_def(self, parent_name: str, field_node):
@@ -326,8 +337,9 @@ class headerGenExporter:
         field_name = "{:s}_{:s}".format(parent_name, field_node.inst_name.upper())
         self.add_def("{:s}_Pos {:d}U".format(field_name, field_node.low))
 
-        maskValue = int("1" * field_node.width, 2) << field_node.low
+        # maskValue = int("1" * field_node.width, 2) << field_node.low
         # self.add_def("{:s}_Msk {:#x}U".format(field_name, maskValue))
+        maskValue = field_node.width
         self.add_def("{0:s}_Msk (0x{1:X}U << {0:s}_Pos)".format(field_name, maskValue))
 
         # FIXME: Not sure that I like this, after running a few example files
