@@ -63,11 +63,9 @@ class headerGenExporter:
         )
 
         self.headerFileContent.append(
-            "#ifdef  __cplusplus\n"
-            "extern \"C\"\n"
-            "{\n"
-            "#endif\n"
+            "#ifdef  __cplusplus\n" 'extern "C"\n' "{\n" "#endif\n"
         )
+        self.headerFileContent.append("#include <stdint.h>\n")
 
         # If it is the root node, skip to top addrmap
         if isinstance(node, RootNode):
@@ -113,11 +111,7 @@ class headerGenExporter:
             # Export top-level node as a single addressBlock
             self.add_addressBlock(node)
 
-        self.headerFileContent.append(
-            "\n#ifdef  __cplusplus\n"
-            "}\n"
-            "#endif\n"
-        )
+        self.headerFileContent.append("\n#ifdef  __cplusplus\n" "}\n" "#endif\n")
 
         # "endif" include block
         self.headerFileContent.append(
@@ -154,7 +148,10 @@ class headerGenExporter:
     # ---------------------------------------------------------------------------
     def add_register(self, parent, node):
         macro_var_name = "n"
+
         self.add_docblock(node=node)
+        self.add_reg_struct(reg_node=node)
+
         if parent.is_array:
             self.add_def(
                 "{:s}_{:s}({:s}) ({:s} + {:#x} + ({:s}*{:#x}) + {:#x})".format(
@@ -190,10 +187,12 @@ class headerGenExporter:
                 )
             )
 
+
         reg_rst_val = 0
+        # Add register field position and mask defines
         for field in node.fields():
             self.check_write_field_typedef(field)
-            self.add_field(
+            self.add_field_pos_mask_def(
                 parent.inst_name.upper() + "_" + node.inst_name.upper(), field
             )
             reg_rst_val |= field.get_property("reset", default=0) << field.low
@@ -224,9 +223,24 @@ class headerGenExporter:
         if node.get_html_desc() is not None:
             desc = node.get_property("desc").strip()
             desc = desc.replace("\n", " ").replace("\r", "")
-            self.headerFileContent[-1] += " /**< {:s}, ACCESS: {:s} */".format(
+
+            access_desc = ""
+            if node.get_property("sw"):
+                access_desc = node.get_property("sw").name.upper() + ","
+
+            onrd_desc = ""
+            if node.get_property("onread"):
+                onrd_desc = node.get_property("onread").name.upper() + ","
+
+            onwr_desc = ""
+            if node.get_property("onwrite"):
+                onwr_desc = node.get_property("onwrite").name.upper()+ ","
+
+            self.headerFileContent[-1] += " /**< {:s}, {}{}{} */".format(
                 desc,
-                node.get_property("sw").name,
+                access_desc,
+                onrd_desc,
+                onwr_desc,
             )
 
     def create_docblock(self, txt: str) -> str:
@@ -263,29 +277,65 @@ class headerGenExporter:
         txt += "[SystemRDL path: '" + enum_id + "']"
         self.headerFileContent.append(self.create_docblock(txt))
 
-        self.headerFileContent.append("typedef enum " + user_enum.__name__.upper() + "_e {")
+        self.headerFileContent.append(
+            "typedef enum " + user_enum.__name__.upper() + "_e {"
+        )
         for e in user_enum:
-            self.headerFileContent.append("  {:s} = {:d}, /**< {} */".format(user_enum.__name__.upper() + "_" + e.name.upper(), int(e),  e.rdl_desc))
+            self.headerFileContent.append(
+                "  {:s} = {:d}, /**< {} */".format(
+                    user_enum.__name__.upper() + "_" + e.name.upper(),
+                    int(e),
+                    e.rdl_desc,
+                )
+            )
             # self.add_inline_desc(e)
 
-        self.headerFileContent.append( "} " + user_enum.__name__.upper() + "_t;\n")
+        self.headerFileContent.append("} " + user_enum.__name__.upper() + "_t;\n")
+
+    def add_reg_struct(self, reg_node):
+        self.headerFileContent.append("typedef struct __attribute__((packed)) {")
+
+        for field in reg_node.fields():
+            out_field = "  "
+
+            ctype = 'UNSUPPORTED_STD_C_TYPE'
+            # SystemRDL 2.0 section 6.2.1 says all types are unsigned
+            if field.width <= 8:
+                c_type = 'uint8_t'
+            elif field.width <= 16:
+                c_type = 'uint16_t'
+            elif field.width <= 32:
+                c_type = 'uint32_t'
+            elif field.width <= 64:
+                c_type = 'uint64_t'
+
+            out_field += c_type + " "+ field.inst_name.lower()
+
+            if (field.width % 4) is not 0:
+                out_field += ":{:d}".format(field.width)
+
+            self.headerFileContent.append(out_field + ";")
+            self.add_inline_desc(field)
+            
+
+        self.headerFileContent.append("}} {}_t;\n".format(reg_node.inst_name.lower()))
 
     # ---------------------------------------------------------------------------
-    def add_field(self, parent_name: str, node):
+    def add_field_pos_mask_def(self, parent_name: str, field_node):
 
-        field_name = "{:s}_{:s}".format(parent_name, node.inst_name.upper())
-        self.add_def("{:s}_Pos {:d}U".format(field_name, node.low))
+        field_name = "{:s}_{:s}".format(parent_name, field_node.inst_name.upper())
+        self.add_def("{:s}_Pos {:d}U".format(field_name, field_node.low))
 
-        maskValue = int("1" * node.width, 2) << node.low
+        maskValue = int("1" * field_node.width, 2) << field_node.low
         # self.add_def("{:s}_Msk {:#x}U".format(field_name, maskValue))
         self.add_def("{0:s}_Msk (0x{1:X}U << {0:s}_Pos)".format(field_name, maskValue))
 
         # FIXME: Not sure that I like this, after running a few example files
         # through this exporter. Thinking that instead documentation for fields
         # should be added to a register's doc block. Would probably look cleaner.
-        self.add_inline_desc(node)
+        self.add_inline_desc(field_node)
 
-        # encode = node.get_property("encode")
+        # encode = field_node.get_property("encode")
         # if encode is not None:
         #    for enum_value in encode:
         #        print("debug point enum ", enum_value.name, enum_value.rdl_name, enum_value.rdl_desc)
