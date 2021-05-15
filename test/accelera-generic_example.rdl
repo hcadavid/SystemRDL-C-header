@@ -97,7 +97,7 @@ enum link_status_enum {
   snooze      = 4'd5  { desc = "Link is in a partial low power state"; };
   sleep       = 4'd6  { desc = "Link is a Full low power state"; };
   wake        = 4'd7  { desc = "Link is waking up from snooze or sleep state"; };
-  active      = 4'd10 { desc = "Link is opertating normally"; };
+  active      = 4'd10 { desc = "Link is operating normally"; };
 };
 
 field link_status_field {
@@ -159,7 +159,7 @@ addrmap some_register_map {
   //
   reg chip_id {
      name = "This chip part number and revision #";
-     desc = "This register cotains the part # and revision # for XYZ ASIC";
+     desc = "This register contains the part # and revision # for XYZ ASIC";
 
      field {
        hw   = w;                                           // This combination of attributes creates an input port for
