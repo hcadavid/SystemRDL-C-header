@@ -1,0 +1,120 @@
+signal puc_sig {
+   name="Power-Up Clear";
+};
+
+puc_sig PUC;
+
+reg port_in {
+  regwidth = 8;
+  desc = "Each bit in each PxIN register reflects the value of the input signal at the corresponding I/O pin when the pin is configured as I/O function.";
+
+  field {
+    sw = r;
+    desc = "";
+  } pinbits_hi[7:0];
+};
+
+reg port_out {
+  regwidth = 8;
+  desc = "Each bit in each PxOUT register is the value to be output on the corresponding I/O pin when the pin is configured as I/O function, output direction, and the pullup/down resistor is disabled.
+  If the pin's pullup/pulldown resistor is enabled, the corresponding bit in the PxOUT register selects pullup or pulldown.
+  ";
+
+  field {
+    sw = rw;
+    desc = "";
+  } pinbits[7:0];
+};
+
+reg port_dir {
+  regwidth = 8;
+  desc = "Each bit in each PxDIR register selects the direction of the corresponding I/O pin, regardless of the
+selected function for the pin. PxDIR bits for I/O pins that are selected for other functions must be set as
+required by the other function.
+  ";
+
+  field {
+    sw = rw;
+    desc = "";
+    resetsignal = PUC;
+  } pinbits[7:0];
+};
+
+regfile gpio_port_with_pin_interrupts {
+  port_in in;
+  port_out out;
+  port_dir dir;
+  // port_ifg ifg;
+  // port_ies ies;
+  // port_ie ie;
+  // port_sel sel;
+  // port_sel sel2;
+  // port_ren ren;
+  sharedextbus;
+};
+
+regfile gpio_port {
+  port_in in;
+  port_out out;
+  port_dir dir;
+  // port_sel sel;
+  // port_sel sel2;
+  // port_ren ren;
+};
+
+regfile timera {
+  reg {
+    regwidth = 16;
+    field { sw = r; }_unused1[15:10];
+    field { sw = rw; } ssel[9:8];
+    field { sw = rw; } id[7:6];
+    field { sw = rw; } mc[5:4];
+    field { sw = rw; } _unused0[3:3];
+    field { sw = rw; } clr[2:2];
+    field { sw = rw; } ie[1:1];
+    field { sw = rw; } ifg[0:0];
+  } ctl;
+
+  reg {
+    regwidth = 16;
+    field { sw = rw; } dat;
+  } cctl0;
+
+  reg {
+    regwidth = 16;
+    field { sw = rw; } data[15:0];
+  } tar;
+
+  reg {
+    regwidth = 16;
+    field { sw = rw; } data[15:0];
+  } ccr0;
+  reg {
+    regwidth = 16;
+    field { sw = rw; } data[15:0];
+  } ccr1;
+  reg {
+    regwidth = 16;
+    field { sw = rw; } data[15:0];
+  } ccr2;
+};
+
+
+addrmap MSP430G2553 {
+
+  name = "MSP430G2553";
+  desc = "[url]https://www.ti.com/lit/ds/symlink/msp430g2553.pdf[/url]";
+
+  gpio_port_with_pin_interrupts p1 @0x0020;
+  gpio_port_with_pin_interrupts p2 @0x0028;
+  gpio_port p3 @0x0018;
+  // gpio_port p4;
+  // gpio_port p5;
+  // gpio_port p6;
+  // gpio_port p7;
+  // gpio_port p8;
+
+  // adc10 adc10a;
+  timera timera_0 @0x0160;
+
+};

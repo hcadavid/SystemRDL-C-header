@@ -35,3 +35,4 @@ python3 ./test/test_gen_header_file.py ./test/accelera-generic_example.rdl
 * [ ] Enums
 * [ ] Structs
 * [ ] `BASEADDR` defines ("instance" base addresses)
+* [ ] Indicate reset source

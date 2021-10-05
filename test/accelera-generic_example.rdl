@@ -91,7 +91,7 @@ reg myReg {
 //
 // Enumeration Example
 //
-enum link_status_enum {
+enum link_status {
   not_present = 4'd0  { desc = "No link peer is currently detected"; };
   training    = 4'd1  { desc = "Link is currently training"; };
   snooze      = 4'd5  { desc = "Link is in a partial low power state"; };
@@ -104,11 +104,11 @@ field link_status_field {
      hw     = rw;
      sw     = r;
      desc   = "Status of a Serdes Link";
-     encode = link_status_enum;
+     encode = link_status;
      fieldwidth = 4;
 };
 
-reg serdes_link_status_reg {
+reg serdes_link_status {
   link_status_field port0;                                 // Instance 4 ports of Link Status
   link_status_field port1;
   link_status_field port2;
@@ -177,14 +177,14 @@ addrmap some_register_map {
 
   external chip_id chip_id_reg @0x0000;                    // Create an Instance of CHIP_ID type called chip_id_reg at Addr=0;
 
-  serdes_link_status_reg link_status;                      // Instance a reg. Auto Address
+  serdes_link_status link_status;                          // Instance a reg. Auto Address
 
-  myReg              myRegInst           @0x0010;            // This instance starts at 0x10
+  myReg              myRegInst           @0x0010;          // This instance starts at 0x10
 
   spi4_pkt_count_reg spi4_pkt_count      @0x0020;
   gige_pkt_count_reg gige_pkt_count_reg;
 
-  fifoRfile          fifo_port[8]        @0x100 += 0x10;     // Create 8 Instances of Fifo Reg File Starting at Address=0x100
-  vc_pkt_count_reg   vc_pkt_count[16]   @0x1000 +=0x10;
+  fifoRfile          fifo_port[8]        @0x100 += 0x10;   // Create 8 Instances of Fifo Reg File Starting at Address=0x100
+  vc_pkt_count_reg   vc_pkt_count[16]    @0x1000 +=0x10;
 
 };                                                         // End some_register_map

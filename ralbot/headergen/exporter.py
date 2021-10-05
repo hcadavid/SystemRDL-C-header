@@ -1,6 +1,7 @@
 import os
 import enum
 import textwrap
+from typing import Tuple
 from datetime import datetime
 
 from systemrdl.node import AddressableNode, RootNode
@@ -132,32 +133,28 @@ class headerGenExporter:
         self.baseAddressName = "%s_BASE_ADDR" % node.inst_name.upper()
 
         for child in node.children():
-            if isinstance(child, RegNode):
-                self.add_register(parent=node, node=child)
-            elif isinstance(child, (AddrmapNode, RegfileNode)):
-                self.add_registerFile(node=child)
+            print(type(child), child)
 
-    def add_registerFile(self, node):
-        for child in node.children():
             if isinstance(child, RegNode):
                 self.add_register(parent=node, node=child)
             elif isinstance(child, (AddrmapNode, RegfileNode)):
                 self.add_docblock(node=child)
-                self.add_registerFile(node=child)
+                self.add_regfile_struct(regfile_node=child)
+                # self.add_registerFile(node=child)
+
+    # def add_registerFile(self, node):
+    #     for child in node.children():
+    #         if isinstance(child, RegNode):
+    #             self.add_register(parent=node, node=child)
+    #         elif isinstance(child, (AddrmapNode, RegfileNode)):
+    #             self.add_docblock(node=child)
+    #             self.add_registerFile(node=child)
 
     # ---------------------------------------------------------------------------
     def add_register(self, parent, node):
         macro_var_name = "n"
 
-        self.add_docblock(node=node)
-        self.add_reg_struct(reg_node=node)
-
         if parent.is_array:
-            self.add_def("{:s}_{:s}_INST_MAX {}".format(
-                parent.inst_name.upper(),
-                node.inst_name.upper(),
-                parent.array_dimensions[0]
-            ))
             self.add_def(
                 "{:s}_{:s}({:s}) ({:s} + {:#x} + ({:s}*{:#x}) + {:#x})".format(
                     parent.inst_name.upper(),
@@ -171,11 +168,13 @@ class headerGenExporter:
                 )
             )
         elif node.is_array:
-            self.add_def("{:s}_{:s}_INST_MAX {}".format(
-                parent.inst_name.upper(),
-                node.inst_name.upper(),
-                node.array_dimensions[0]
-            ))
+            self.add_def(
+                "{:s}_{:s}_INST_MAX {}".format(
+                    parent.inst_name.upper(),
+                    node.inst_name.upper(),
+                    node.array_dimensions[0],
+                )
+            )
             self.add_def(
                 "{:s}_{:s}({:s}) ({:s} + {:#x} + ({:s}*{:#x}))".format(
                     parent.inst_name.upper(),
@@ -197,20 +196,21 @@ class headerGenExporter:
                 )
             )
 
-
         reg_rst_val = 0
         # Add register field position and mask defines
         for field in node.fields():
             self.check_write_field_typedef(field)
-            self.add_field_pos_mask_def(
+            self.add_def_field_pos_mask(
                 parent.inst_name.upper() + "_" + node.inst_name.upper(), field
             )
             reg_rst_val |= field.get_property("reset", default=0) << field.low
 
+        self.headerFileContent.append(
+            "/** Reset value of '{}' */".format(node.inst_name)
+        )
         self.add_def(
-            "{:s}_{:s}_RESET {:#x} /**< Reset value of '{}' */".format(
-                parent.inst_name.upper(), node.inst_name.upper(), reg_rst_val,
-                node.inst_name
+            "{:s}_{:s}_RESET {:#x}".format(
+                parent.inst_name.upper(), node.inst_name.upper(), reg_rst_val
             )
         )
 
@@ -245,13 +245,15 @@ class headerGenExporter:
 
             onwr_desc = ""
             if node.get_property("onwrite"):
-                onwr_desc = node.get_property("onwrite").name.upper()+ ","
+                onwr_desc = node.get_property("onwrite").name.upper() + ","
 
-            self.headerFileContent[-1] += " /**< {:s}, {}{}{} */".format(
-                desc,
-                access_desc,
-                onrd_desc,
-                onwr_desc,
+            self.headerFileContent.append(
+                "/** {:s}, {}{}{} */".format(
+                    desc,
+                    access_desc,
+                    onrd_desc,
+                    onwr_desc,
+                )
             )
 
     def create_docblock(self, txt: str) -> str:
@@ -293,59 +295,91 @@ class headerGenExporter:
         )
         for e in user_enum:
             self.headerFileContent.append(
-                "  {:s} = {:d}, /**< {} */".format(
+                "  /** {} */\n  {:s} = {:d},".format(
+                    e.rdl_desc,
                     user_enum.__name__.upper() + "_" + e.name.upper(),
                     int(e),
-                    e.rdl_desc,
                 )
             )
             # self.add_inline_desc(e)
 
         self.headerFileContent.append("} " + user_enum.__name__.upper() + "_t;\n")
 
-    def add_reg_struct(self, reg_node):
+    def add_regfile_struct(self, regfile_node):
         self.headerFileContent.append("typedef struct __attribute__((packed)) {")
 
+        for reg in regfile_node.children():
+            self.add_reg_fields_union(reg_node=reg)
+
+        self.headerFileContent.append("}} {}_t;\n".format(regfile_node.inst_name))
+
+    def add_reg_fields_union(self, reg_node):
+
+        nofields_reg = ""
+        field_cnt = 0
+        field_strs = []
         for field in reg_node.fields():
-            out_field = "  "
+            field_cnt += 1
 
-            ctype = 'UNSUPPORTED_STD_C_TYPE'
-            # SystemRDL 2.0 section 6.2.1 says all types are unsigned
-            if field.width <= 8:
-                c_type = 'uint8_t'
-            elif field.width <= 16:
-                c_type = 'uint16_t'
-            elif field.width <= 32:
-                c_type = 'uint32_t'
-            elif field.width <= 64:
-                c_type = 'uint64_t'
+            ftype, fbits = self.get_c_field_type(field_node=field)
+            s = ftype + " "
+            s += field.inst_name
+            if fbits is not None:
+                s += fbits
+            s += ";"
 
-            out_field += c_type + " "+ field.inst_name
+            field_strs.append(s)
 
-            if (field.width % 4) is not 0:
-                out_field += ":{:d}".format(field.width)
+            nofields_reg = ftype + " " + reg_node.inst_name
+            if fbits is not None:
+                nofields_reg += fbits
+            nofields_reg += ";"
 
-            self.headerFileContent.append(out_field + ";")
-            self.add_inline_desc(field)
-            
+        if field_cnt > 1:
+            self.headerFileContent.append("struct {")
+            self.headerFileContent.extend(field_strs)
+            self.headerFileContent.append("} " + reg_node.inst_name + ";")
+        else:
+            self.headerFileContent.append(nofields_reg)
 
-        self.headerFileContent.append("}} {}_t;\n".format(reg_node.inst_name))
+    def get_c_field_type(self, field_node) -> Tuple[str, str]:
+        c_type = "UNSUPPORTED_STD_C_TYPE"
+        # SystemRDL 2.0 section 6.2.1 says all types are unsigned
+        if field_node.width <= 8:
+            c_type = "uint8_t"
+        elif field_node.width <= 16:
+            c_type = "uint16_t"
+        elif field_node.width <= 32:
+            c_type = "uint32_t"
+        elif field_node.width <= 64:
+            c_type = "uint64_t"
+
+        bitfield_str = None
+
+        if ((field_node.width % 4) != 0) or (field_node.width < 8):
+            bitfield_str = ":{:d}".format(field_node.width)
+
+        return (c_type, bitfield_str)
 
     # ---------------------------------------------------------------------------
-    def add_field_pos_mask_def(self, parent_name: str, field_node):
-
-        field_name = "{:s}_{:s}".format(parent_name, field_node.inst_name.upper())
-        self.add_def("{:s}_Pos {:d}U".format(field_name, field_node.low))
-
-        # maskValue = int("1" * field_node.width, 2) << field_node.low
-        # self.add_def("{:s}_Msk {:#x}U".format(field_name, maskValue))
-        maskValue = field_node.width
-        self.add_def("{0:s}_Msk (0x{1:X}U << {0:s}_Pos)".format(field_name, maskValue))
+    def add_def_field_pos_mask(self, parent_name: str, field_node):
 
         # FIXME: Not sure that I like this, after running a few example files
         # through this exporter. Thinking that instead documentation for fields
         # should be added to a register's doc block. Would probably look cleaner.
         self.add_inline_desc(field_node)
+
+        # maskValue = int("1" * field_node.width, 2) << field_node.low
+        # self.add_def("{:s}_Msk {:#x}U".format(field_name, maskValue))
+        maskValue = field_node.width
+        field_name = "{:s}_{:s}".format(parent_name, field_node.inst_name.upper())
+
+        self.add_def("{:s}_Msk (0x{:X}U << {}U)".format(field_name, maskValue, field_node.low))
+
+       
+        self.add_def("{:s}_Pos {:d}U".format(field_name, field_node.low))
+
+
 
         # encode = field_node.get_property("encode")
         # if encode is not None:
